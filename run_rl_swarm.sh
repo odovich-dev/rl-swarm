@@ -63,9 +63,6 @@ ROOT_DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 cleanup() {
     echo_green ">> Shutting down trainer..."
 
-    # Remove modal credentials if they exist
-    rm -r $ROOT_DIR/modal-login/temp-data/*.json 2> /dev/null || true
-
     # Kill all processes belonging to this script's process group
     kill -- -$$ || true
 
@@ -91,46 +88,22 @@ cat << "EOF"
 
 EOF
 
-while true; do
-    echo -en $GREEN_TEXT
-    read -p ">> Would you like to connect to the Testnet? [Y/n] " yn
-    echo -en $RESET_TEXT
-    yn=${yn:-Y}  # Default to "Y" if the user presses Enter
-    case $yn in
-        [Yy]*)  CONNECT_TO_TESTNET=true && break ;;
-        [Nn]*)  CONNECT_TO_TESTNET=false && break ;;
-        *)  echo ">>> Please answer yes or no." ;;
-    esac
-done
+# Automated choices:
+CONNECT_TO_TESTNET=true
+USE_BIG_SWARM=false
+PARAM_B=0.5
 
-while true; do
-    echo -en $GREEN_TEXT
-    read -p ">> Which swarm would you like to join (Math (A) or Math Hard (B))? [A/b] " ab
-    echo -en $RESET_TEXT
-    ab=${ab:-A}  # Default to "A" if the user presses Enter
-    case $ab in
-        [Aa]*)  USE_BIG_SWARM=false && break ;;
-        [Bb]*)  USE_BIG_SWARM=true && break ;;
-        *)  echo ">>> Please answer A or B." ;;
-    esac
-done
+echo_green ">> Automatically selected options:"
+echo "Connect to Testnet: $CONNECT_TO_TESTNET"
+echo "Swarm: Math (A)"
+echo "Parameters: $PARAM_B billion"
+
 if [ "$USE_BIG_SWARM" = true ]; then
     SWARM_CONTRACT="$BIG_SWARM_CONTRACT"
 else
     SWARM_CONTRACT="$SMALL_SWARM_CONTRACT"
 fi
-while true; do
-    echo -en $GREEN_TEXT
-    read -p ">> How many parameters (in billions)? [0.5, 1.5, 7, 32, 72] " pc
-    echo -en $RESET_TEXT
-    pc=${pc:-0.5}  # Default to "0.5" if the user presses Enter
-    case $pc in
-        0.5 | 1.5 | 7 | 32 | 72) PARAM_B=$pc && break ;;
-        *)  echo ">>> Please answer in [0.5, 1.5, 7, 32, 72]." ;;
-    esac
-done
 
-# Create logs directory if it doesn't exist
 mkdir -p "$ROOT/logs"
 
 if [ "$CONNECT_TO_TESTNET" = true ]; then
@@ -185,18 +158,34 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     echo "Started server process: $SERVER_PID"
     sleep 5
 
-    # Try to open the URL in the default browser
-    if open http://localhost:3000 2> /dev/null; then
-        echo_green ">> Successfully opened http://localhost:3000 in your default browser."
+    # Проверяем, есть ли данные в modal-login/temp-data
+    if [ -z "$(ls -A modal-login/temp-data/*.json 2>/dev/null)" ]; then
+        echo_green ">> No user data found. Starting localtunnel..."
+
+        # Tunnel the localhost:3000 using localtunnel
+        if ! command -v lt > /dev/null 2>&1; then
+            echo "Installing localtunnel..."
+            npm install -g localtunnel
+        fi
+
+        echo_green ">> Starting localtunnel for port 3000..."
+        lt --port 3000 &
+        LT_PID=$!
+
+        # Wait a bit to ensure tunnel is up
+        sleep 3
+
+        echo "Your tunnel is running! Use the link printed above to visit the website."
+        echo "If prompted for a password, use your VPS IP."
     else
-        echo ">> Failed to open http://localhost:3000. Please open it manually."
+        echo_green ">> User data found. Skipping localtunnel."
     fi
 
     cd ..
 
     echo_green ">> Waiting for modal userData.json to be created..."
     while [ ! -f "modal-login/temp-data/userData.json" ]; do
-        sleep 5  # Wait for 5 seconds before checking again
+        sleep 5
     done
     echo "Found userData.json. Proceeding..."
 
@@ -245,20 +234,7 @@ fi
 
 echo_green ">> Done!"
 
-HF_TOKEN=${HF_TOKEN:-""}
-if [ -n "${HF_TOKEN}" ]; then # Check if HF_TOKEN is already set and use if so. Else give user a prompt to choose.
-    HUGGINGFACE_ACCESS_TOKEN=${HF_TOKEN}
-else
-    echo -en $GREEN_TEXT
-    read -p ">> Would you like to push models you train in the RL swarm to the Hugging Face Hub? [y/N] " yn
-    echo -en $RESET_TEXT
-    yn=${yn:-N} # Default to "N" if the user presses Enter
-    case $yn in
-        [Yy]*) read -p "Enter your Hugging Face access token: " HUGGINGFACE_ACCESS_TOKEN ;;
-        [Nn]*) HUGGINGFACE_ACCESS_TOKEN="None" ;;
-        *) echo ">>> No answer was given, so NO models will be pushed to Hugging Face Hub" && HUGGINGFACE_ACCESS_TOKEN="None" ;;
-    esac
-fi
+HUGGINGFACE_ACCESS_TOKEN="None"  # Always set to N by default
 
 echo_green ">> Good luck in the swarm!"
 echo_blue ">> Post about rl-swarm on X/twitter! --> https://tinyurl.com/swarmtweet"
