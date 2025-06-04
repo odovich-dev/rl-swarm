@@ -97,6 +97,12 @@ class HivemindGRPOTrainer:
                     value=self.stage_rewards,
                     expiration_time=get_dht_time() + self.node.out_expiration,
                 )
+
+                self.logger.info(f"QUESTION: {question}")
+                self.logger.info(f"SAVING TO DHT: round={self.node.round_num}, stage={self.node.stage_num}")
+                self.logger.info(f"stage_rewards (sum): {self.stage_rewards}")
+                self.logger.info(f"raw rewards: {self.node.rewards}")
+            
             if self.node.is_coordinator:
                 self.publish_leaderboard()
 
