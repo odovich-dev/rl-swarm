@@ -192,13 +192,19 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     done
 fi
 
-echo_green ">> Done!"
-
-# Manually set CONFIG_PATH and GAME
+echo_green ">> Getting requirements..."
+source .venv/bin/activate
+pip install --upgrade pip
 if [ -n "$CPU_ONLY" ] || ! command -v nvidia-smi &> /dev/null; then
-    CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml"
+    # CPU-only mode or no NVIDIA GPU found
+    pip install -r "$ROOT"/requirements-cpu.txt
+    CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml" # TODO: Fix naming.
     GAME="gsm8k"
 else
+    # NVIDIA GPU found
+    pip install -r "$ROOT"/requirements-gpu.txt
+    pip install flash-attn --no-build-isolation
+
     case "$PARAM_B" in
         32 | 72) CONFIG_PATH="$ROOT/hivemind_exp/configs/gpu/grpo-qwen-2.5-${PARAM_B}b-bnb-4bit-deepseek-r1.yaml" ;;
         0.5 | 1.5 | 7) CONFIG_PATH="$ROOT/hivemind_exp/configs/gpu/grpo-qwen-2.5-${PARAM_B}b-deepseek-r1.yaml" ;;
@@ -211,6 +217,8 @@ else
         GAME="gsm8k"
     fi
 fi
+
+echo_green ">> Done!"
 
 HUGGINGFACE_ACCESS_TOKEN="None"  # Always set to N by default
 
