@@ -139,6 +139,7 @@ class HivemindGRPOTrainer:
             log_tag = self.node.key
 
         self.logger = logging.getLogger(f"{__name__}:{log_tag}")
+        self.wandb_run = None
         if "wandb" in self.config.report_to:
             self.wandb_run = wandb.init(project='rl-swarm', dir='logs', name=get_name_from_peer_id(self.node.key, True), mode="offline")
 
