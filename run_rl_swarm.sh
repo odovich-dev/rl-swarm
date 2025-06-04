@@ -26,22 +26,17 @@ DEFAULT_HOST_MULTI_ADDRS="/ip4/0.0.0.0/tcp/38331"
 HOST_MULTI_ADDRS=${HOST_MULTI_ADDRS:-$DEFAULT_HOST_MULTI_ADDRS}
 
 # Path to an RSA private key. If this path does not exist, a new key pair will be created.
-# Remove this file if you want a new PeerID.
 DEFAULT_IDENTITY_PATH="$ROOT"/swarm.pem
 IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
 
 SMALL_SWARM_CONTRACT="0x69C6e1D608ec64885E7b185d39b04B491a71768C"
 BIG_SWARM_CONTRACT="0x6947c6E196a48B77eFa9331EC1E3e45f3Ee5Fd58"
 
-# Will ignore any visible GPUs if set.
 CPU_ONLY=${CPU_ONLY:-""}
-
-# Set if successfully parsed from modal-login/temp-data/userData.json.
 ORG_ID=${ORG_ID:-""}
 
 GREEN_TEXT="\033[32m"
 BLUE_TEXT="\033[34m"
-RED_TEXT="\033[31m"
 RESET_TEXT="\033[0m"
 
 echo_green() {
@@ -52,29 +47,15 @@ echo_blue() {
     echo -e "$BLUE_TEXT$1$RESET_TEXT"
 }
 
-echo_red() {
-    echo -e "$RED_TEXT$1$RESET_TEXT"
-}
-
 ROOT_DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 
-
-# Function to clean up the server process upon exit
 cleanup() {
     echo_green ">> Shutting down trainer..."
-
-    # Kill all processes belonging to this script's process group
     kill -- -$$ || true
-
     exit 0
 }
 
-errnotify() {
-    echo_red ">> An error was detected while running rl-swarm. See $ROOT/logs for full logs."
-}
-
 trap cleanup EXIT
-trap errnotify ERR
 
 echo -e "\033[38;5;224m"
 cat << "EOF"
@@ -87,6 +68,9 @@ cat << "EOF"
     From Gensyn
 
 EOF
+
+# Parse archive name parameter (default: "backup")
+ARCHIVE_NAME="${1:-backup}"
 
 # Automated choices:
 CONNECT_TO_TESTNET=true
@@ -107,12 +91,9 @@ fi
 mkdir -p "$ROOT/logs"
 
 if [ "$CONNECT_TO_TESTNET" = true ]; then
-    # Run modal_login server.
     echo "Please login to create an Ethereum Server Wallet"
     cd modal-login
-    # Check if the yarn command exists; if not, install Yarn.
 
-    # Node.js + NVM setup
     if ! command -v node > /dev/null 2>&1; then
         echo "Node.js not found. Installing NVM and latest Node.js..."
         export NVM_DIR="$HOME/.nvm"
@@ -127,7 +108,6 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     fi
 
     if ! command -v yarn > /dev/null 2>&1; then
-        # Detect Ubuntu (including WSL Ubuntu) and install Yarn accordingly
         if grep -qi "ubuntu" /etc/os-release 2> /dev/null || uname -r | grep -qi "microsoft"; then
             echo "Detected Ubuntu or WSL Ubuntu. Installing Yarn via apt..."
             curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
@@ -135,32 +115,29 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
             sudo apt update && sudo apt install -y yarn
         else
             echo "Yarn not found. Installing Yarn globally with npm (no profile edits)…"
-            # This lands in $NVM_DIR/versions/node/<ver>/bin which is already on PATH
             npm install -g --silent yarn
         fi
     fi
 
     ENV_FILE="$ROOT"/modal-login/.env
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS version
         sed -i '' "3s/.*/SMART_CONTRACT_ADDRESS=$SWARM_CONTRACT/" "$ENV_FILE"
     else
-        # Linux version
         sed -i "3s/.*/SMART_CONTRACT_ADDRESS=$SWARM_CONTRACT/" "$ENV_FILE"
     fi
 
     yarn install --immutable
     echo "Building server"
     yarn build > "$ROOT/logs/yarn.log" 2>&1
-    yarn start >> "$ROOT/logs/yarn.log" 2>&1 & # Run in background and log output
+    yarn start >> "$ROOT/logs/yarn.log" 2>&1 &
 
-    SERVER_PID=$!  # Store the process ID
+    SERVER_PID=$!
     echo "Started server process: $SERVER_PID"
     sleep 5
 
     # Проверяем, есть ли данные в modal-login/temp-data
-    if [ -z "$(ls -A modal-login/temp-data/*.json 2>/dev/null)" ]; then
-        echo_green ">> No user data found. Starting localtunnel..."
+    if [ ! -f "modal-login/temp-data/userData.json" ]; then
+        echo_green ">> userData.json not found. Starting tunnel..."
 
         # Tunnel the localhost:3000 using localtunnel
         if ! command -v lt > /dev/null 2>&1; then
@@ -192,7 +169,6 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
     echo "Your ORG_ID is set to: $ORG_ID"
 
-    # Wait until the API key is activated by the client
     echo "Waiting for API key to become activated..."
     while true; do
         STATUS=$(curl -s "http://localhost:3000/api/get-api-key-status?orgId=$ORG_ID")
@@ -206,19 +182,13 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     done
 fi
 
-echo_green ">> Getting requirements..."
+echo_green ">> Done!"
 
-pip install --upgrade pip
+# Manually set CONFIG_PATH and GAME
 if [ -n "$CPU_ONLY" ] || ! command -v nvidia-smi &> /dev/null; then
-    # CPU-only mode or no NVIDIA GPU found
-    pip install -r "$ROOT"/requirements-cpu.txt
-    CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml" # TODO: Fix naming.
+    CONFIG_PATH="$ROOT/hivemind_exp/configs/mac/grpo-qwen-2.5-0.5b-deepseek-r1.yaml"
     GAME="gsm8k"
 else
-    # NVIDIA GPU found
-    pip install -r "$ROOT"/requirements-gpu.txt
-    pip install flash-attn --no-build-isolation
-
     case "$PARAM_B" in
         32 | 72) CONFIG_PATH="$ROOT/hivemind_exp/configs/gpu/grpo-qwen-2.5-${PARAM_B}b-bnb-4bit-deepseek-r1.yaml" ;;
         0.5 | 1.5 | 7) CONFIG_PATH="$ROOT/hivemind_exp/configs/gpu/grpo-qwen-2.5-${PARAM_B}b-deepseek-r1.yaml" ;;
@@ -232,9 +202,16 @@ else
     fi
 fi
 
-echo_green ">> Done!"
-
 HUGGINGFACE_ACCESS_TOKEN="None"  # Always set to N by default
+
+# Создаём архив перед стартом модели
+ARCHIVE_PATH="/root/${ARCHIVE_NAME}.tar"
+cd /root
+tar -cvf "$ARCHIVE_PATH" \
+    rl-swarm/swarm.pem \
+    rl-swarm/modal-login/temp-data
+echo_green ">> Archive $ARCHIVE_PATH created successfully!"
+cd "$ROOT"  # возвращаемся в rl-swarm
 
 echo_green ">> Good luck in the swarm!"
 echo_blue ">> Post about rl-swarm on X/twitter! --> https://tinyurl.com/swarmtweet"
@@ -259,4 +236,4 @@ else
         --game "$GAME"
 fi
 
-wait  # Keep script running until Ctrl+C
+wait
