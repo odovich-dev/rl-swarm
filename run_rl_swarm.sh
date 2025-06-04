@@ -69,9 +69,6 @@ cat << "EOF"
 
 EOF
 
-# Parse archive name parameter (default: "backup")
-ARCHIVE_NAME="${1:-backup}"
-
 # Automated choices:
 CONNECT_TO_TESTNET=true
 USE_BIG_SWARM=false
@@ -221,19 +218,6 @@ fi
 echo_green ">> Done!"
 
 HUGGINGFACE_ACCESS_TOKEN="None"  # Always set to N by default
-
-# Создаём архив перед стартом модели
-ARCHIVE_PATH="/root/${ARCHIVE_NAME}.tar"
-cd /root
-if [ ! -f "$ARCHIVE_PATH" ]; then
-    tar -cvf "$ARCHIVE_PATH" \
-        rl-swarm/swarm.pem \
-        rl-swarm/modal-login/temp-data
-    echo_green ">> Archive $ARCHIVE_PATH created successfully!"
-else
-    echo_green ">> Archive $ARCHIVE_PATH already exists, skipping creation."
-fi
-cd "$ROOT"  # возвращаемся в rl-swarm
 
 echo_green ">> Good luck in the swarm!"
 echo_blue ">> Post about rl-swarm on X/twitter! --> https://tinyurl.com/swarmtweet"
