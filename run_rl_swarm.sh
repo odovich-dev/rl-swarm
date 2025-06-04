@@ -149,6 +149,10 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
         lt --port 3000 &
         LT_PID=$!
 
+        # Выводим IP сервера
+        SERVER_IP=$(hostname -I | awk '{print $1}')
+        echo "Server IP: $SERVER_IP"
+
         # Wait a bit to ensure tunnel is up
         sleep 3
 
@@ -168,6 +172,12 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
 
     ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
     echo "Your ORG_ID is set to: $ORG_ID"
+
+    # Закрываем туннель, если он был запущен
+    if [ -n "${LT_PID:-}" ]; then
+        kill "$LT_PID" || true
+        echo_green ">> Localtunnel has been closed."
+    fi
 
     echo "Waiting for API key to become activated..."
     while true; do
@@ -207,10 +217,14 @@ HUGGINGFACE_ACCESS_TOKEN="None"  # Always set to N by default
 # Создаём архив перед стартом модели
 ARCHIVE_PATH="/root/${ARCHIVE_NAME}.tar"
 cd /root
-tar -cvf "$ARCHIVE_PATH" \
-    rl-swarm/swarm.pem \
-    rl-swarm/modal-login/temp-data
-echo_green ">> Archive $ARCHIVE_PATH created successfully!"
+if [ ! -f "$ARCHIVE_PATH" ]; then
+    tar -cvf "$ARCHIVE_PATH" \
+        rl-swarm/swarm.pem \
+        rl-swarm/modal-login/temp-data
+    echo_green ">> Archive $ARCHIVE_PATH created successfully!"
+else
+    echo_green ">> Archive $ARCHIVE_PATH already exists, skipping creation."
+fi
 cd "$ROOT"  # возвращаемся в rl-swarm
 
 echo_green ">> Good luck in the swarm!"
