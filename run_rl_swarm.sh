@@ -136,7 +136,7 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     sleep 5
 
     # Проверяем, есть ли данные в modal-login/temp-data
-    if [ ! -f "modal-login/temp-data/userData.json" ]; then
+    if [ ! -f "$ROOT/modal-login/temp-data/userData.json" ]; then
         echo_green ">> userData.json not found. Starting tunnel..."
 
         # Tunnel the localhost:3000 using localtunnel
