@@ -67,9 +67,6 @@ ROOT_DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 cleanup() {
     echo_green ">> Shutting down trainer..."
 
-    # Remove modal credentials if they exist
-    rm -r $ROOT_DIR/modal-login/temp-data/*.json 2> /dev/null || true
-
     # Kill all processes belonging to this script's process group
     kill -- -$$ || true
 
@@ -154,15 +151,42 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     echo "Started server process: $SERVER_PID"
     sleep 5
 
-    # Try to open the URL in the default browser
-    if [ -z "$DOCKER" ]; then
-        if open http://localhost:3000 2> /dev/null; then
-            echo_green ">> Successfully opened http://localhost:3000 in your default browser."
-        else
-            echo ">> Failed to open http://localhost:3000. Please open it manually."
+    # Проверяем, есть ли данные в modal-login/temp-data
+    if [ ! -f "$ROOT/modal-login/temp-data/userData.json" ]; then
+        echo_green ">> userData.json not found. Starting tunnel..."
+
+        # Tunnel the localhost:3000 using localtunnel
+        if ! command -v lt > /dev/null 2>&1; then
+            echo "Installing localtunnel..."
+            npm install -g localtunnel
         fi
+
+        echo_green ">> Starting localtunnel for port 3000..."
+        lt --port 3000 &
+        LT_PID=$!
+
+        # Выводим IP сервера
+        SERVER_IP=$(hostname -I | awk '{print $1}')
+        echo "Server IP: $SERVER_IP"
+
+        # Wait a bit to ensure tunnel is up
+        sleep 3
+
+        echo "Your tunnel is running! Use the link printed above to visit the website."
+        echo "If prompted for a password, use your VPS IP."
     else
-        echo_green ">> Please open http://localhost:3000 in your host browser."
+        echo_green ">> User data found. Skipping localtunnel."
+        
+        # Try to open the URL in the default browser if not in Docker
+        if [ -z "$DOCKER" ]; then
+            if open http://localhost:3000 2> /dev/null; then
+                echo_green ">> Successfully opened http://localhost:3000 in your default browser."
+            else
+                echo ">> Failed to open http://localhost:3000. Please open it manually."
+            fi
+        else
+            echo_green ">> Please open http://localhost:3000 in your host browser."
+        fi
     fi
 
     cd ..
@@ -175,6 +199,12 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
 
     ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
     echo "Your ORG_ID is set to: $ORG_ID"
+
+    # Закрываем туннель, если он был запущен
+    if [ -n "${LT_PID:-}" ]; then
+        kill "$LT_PID" || true
+        echo_green ">> Localtunnel has been closed."
+    fi
 
     # Wait until the API key is activated by the client
     echo "Waiting for API key to become activated..."
